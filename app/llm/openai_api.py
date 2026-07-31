@@ -23,44 +23,23 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # short-term dialogue memory
 NPC_MEMORY = deque(maxlen=6)
 
-# directory containing prompt files
-PROMPT_DIR = Path(__file__).parent / "prompts"
+# prompt file
+SYSTEM_PROMPT_PATH = Path(__file__).parent / "prompts" / "default.txt"
 
-# prompt cache to avoid disk reads every request
-PROMPT_CACHE = {}
-
-
-def load_prompt(npc_type: str) -> str:
+def load_system_prompt() -> str:
     """
-    Loads the system prompt for the given NPC type.
-
-    Prompts are cached after the first load to avoid repeated disk access.
-    If the requested NPC type does not exist, the default prompt is used.
+    Loads the system prompt.
     """
 
-    prompt_file = PROMPT_DIR / f"{npc_type}.txt"
-
-    if not prompt_file.exists():
-        npc_type = "default"
-        prompt_file = PROMPT_DIR / "default.txt"
-
-    if npc_type in PROMPT_CACHE:
-        return PROMPT_CACHE[npc_type]
-
-    with open(prompt_file, "r", encoding="utf-8") as f:
-        prompt = f.read()
-
-    PROMPT_CACHE[npc_type] = prompt
-    return prompt
+    with open(SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
+        return f.read()
 
 
-def npc_api(user_text: str, npc_type: str) -> str:
+def npc_api(user_text: str) -> str:
     """
     Sends the user's utterance to the LLM and returns a JSON-formatted response.
-    The NPC personality is determined by npc_type.
     """
-
-    system_prompt = load_prompt(npc_type)
+    system_prompt = load_system_prompt()
 
     user_prompt = f"""
     Player said:
@@ -89,13 +68,13 @@ def npc_api(user_text: str, npc_type: str) -> str:
     return response.choices[0].message.content
 
 
-def npc_chat(user_text: str, npc_type: str) -> Dict:
+def npc_chat(user_text: str) -> Dict:
     """
     High-level wrapper used by the backend conversation pipeline.
     Parses the JSON reply from the LLM.
     """
 
-    raw_response = npc_api(user_text, npc_type)
+    raw_response = npc_api(user_text)
 
     try:
         parsed = json.loads(raw_response)
@@ -109,11 +88,3 @@ def npc_chat(user_text: str, npc_type: str) -> Dict:
     NPC_MEMORY.append({"role": "assistant", "content": reply_text})
 
     return parsed
-
-
-def reset_npc_memory():
-    """
-    Clears conversation memory.
-    Should be called when a new scene starts.
-    """
-    NPC_MEMORY.clear()

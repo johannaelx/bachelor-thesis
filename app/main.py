@@ -1,24 +1,25 @@
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 load_dotenv()  # must run before importing modules that access env vars
 
 import base64
 import traceback
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.asr.whisper import transcribe_wav_bytes
 from app.llm.openai_api import npc_chat
-from app.tts.piper import speaker
+from app.tts.piper import load_voice, speaker
 
-SCENE_TO_NPC = {
-    "BakeryScene": "baker",
-    "Freundschaftstreff": "friend"
-}
 
-DEFAULT_NPC = "default"
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    load_voice()
+    yield
 
-app = FastAPI(title="ConVRsation Backend")
+
+app = FastAPI(title="Bachelorarbeit", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -28,13 +29,13 @@ def health():
 conversation_running = False
 
 @app.post("/conversation")
-async def conversation(audio: UploadFile = File(...), scene: str = Form(...)):
+async def conversation(audio: UploadFile = File(...)):
     """
     Processes a spoken user input through the full speech pipeline:
-    ASR (Whisper) -> LLM (NPC logic) -> TTS (Piper).
+    ASR (Whisper) -> LLM (gpt-4o-mini) -> TTS (Piper).
 
     Expects a WAV audio file and returns a JSON response containing
-    the NPC reply text and base64-encoded synthesized WAV audio.
+    the reply text and base64-encoded synthesized WAV audio.
     """
 
     global conversation_running
@@ -61,18 +62,12 @@ async def conversation(audio: UploadFile = File(...), scene: str = Form(...)):
         transcription: str = transcribe_wav_bytes(wav_bytes)
         print("TRANSCRIPTION:", repr(transcription))
 
-        # determine NPC personality based on scene
-        npc_type = SCENE_TO_NPC.get(scene, DEFAULT_NPC)
-
-        print("SCENE:", scene)
-        print("NPC_TYPE:", npc_type)
-
         # LLM
-        llm_response: dict = npc_chat(transcription, npc_type)
+        llm_response: dict = npc_chat(transcription)
         print("LLM_RESPONSE:", repr(llm_response))
 
         # TTS
-        tts_audio: bytes = speaker(llm_response["reply"], npc_type)
+        tts_audio: bytes = speaker(llm_response["reply"])
 
     except Exception as e:
         traceback.print_exc()
@@ -86,7 +81,7 @@ async def conversation(audio: UploadFile = File(...), scene: str = Form(...)):
     # encode WAV audio as base64 for JSON transport
     audio_b64 = base64.b64encode(tts_audio).decode("utf-8")
 
-    # return NPC reply text alongside the synthesized audio
+    # return reply text alongside the synthesized audio
     return JSONResponse(content={
         "reply": llm_response["reply"],
         "audio": audio_b64,

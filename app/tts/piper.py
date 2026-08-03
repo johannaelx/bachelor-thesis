@@ -7,40 +7,30 @@ from piper import PiperVoice, SynthesisConfig
 BASE_DIR = Path(__file__).resolve().parent
 
 # directory containing TTS models
-MODEL_DIR = BASE_DIR / "models"
+VOICE_MODEL_PATH = BASE_DIR / "models" / "en_US-ryan-medium.onnx"
 
-# mapping NPC personalities → voice models
-VOICE_MODELS = {
-    "baker": "en_US-ryan-medium.onnx",
-    "friend": "en_US-hfc_male-medium.onnx",
-    "default": "en_US-ryan-medium.onnx",
-}
-
-# cache loaded voices to avoid reloading models
-VOICE_CACHE = {}
+voice: PiperVoice | None = None
 
 
-def get_voice(npc_type: str) -> PiperVoice:
+def load_voice() -> None:
     """
-    Returns the Piper voice for the given NPC type.
-    Voices are cached to avoid repeated model loading.
+    Loads the Piper voice model once at application startup.
     """
+    global voice
 
-    model_name = VOICE_MODELS.get(npc_type, VOICE_MODELS["default"])
+    if not VOICE_MODEL_PATH.exists():
+        raise FileNotFoundError(f"Piper model not found: {VOICE_MODEL_PATH}")
 
-    if model_name in VOICE_CACHE:
-        return VOICE_CACHE[model_name]
+    voice = PiperVoice.load(str(VOICE_MODEL_PATH))
+    print("Loaded TTS voice model.")
 
-    model_path = MODEL_DIR / model_name
 
-    if not model_path.exists():
-        raise FileNotFoundError(f"Piper model not found: {model_path}")
-
-    voice = PiperVoice.load(str(model_path))
-
-    VOICE_CACHE[model_name] = voice
-
-    print(f"Loaded TTS voice model: {model_name}")
+def get_voice() -> PiperVoice:
+    """
+    Returns the cached Piper voice loaded at startup.
+    """
+    if voice is None:
+        raise RuntimeError("Piper voice not loaded. Call load_voice() at startup.")
 
     return voice
 
@@ -55,12 +45,12 @@ syn_config = SynthesisConfig(
 )
 
 
-def speaker(text_input: str, npc_type: str) -> bytes:
+def speaker(text_input: str) -> bytes:
     """
-    Synthesizes speech from text using the voice assigned to the NPC type.
+    Synthesizes speech from text using the voice.
     """
 
-    voice = get_voice(npc_type)
+    voice = get_voice()
 
     buffer = io.BytesIO()
 

@@ -7,21 +7,30 @@ from piper import PiperVoice, SynthesisConfig
 BASE_DIR = Path(__file__).resolve().parent
 
 # directory containing TTS models
-VOICE_MODEL_PATH = BASE_DIR / "models" /"en_US-ryan-medium.onnx"
+VOICE_MODEL_PATH = BASE_DIR / "models" / "en_US-ryan-medium.onnx"
+
+voice: PiperVoice | None = None
 
 
-def get_voice() -> PiperVoice:
+def load_voice() -> None:
     """
-    Returns the Piper voice.
-    Voices are cached to avoid repeated model loading.
+    Loads the Piper voice model once at application startup.
     """
+    global voice
 
     if not VOICE_MODEL_PATH.exists():
         raise FileNotFoundError(f"Piper model not found: {VOICE_MODEL_PATH}")
 
     voice = PiperVoice.load(str(VOICE_MODEL_PATH))
+    print("Loaded TTS voice model.")
 
-    print(f"Loaded TTS voice model.")
+
+def get_voice() -> PiperVoice:
+    """
+    Returns the cached Piper voice loaded at startup.
+    """
+    if voice is None:
+        raise RuntimeError("Piper voice not loaded. Call load_voice() at startup.")
 
     return voice
 

@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 load_dotenv()  # must run before importing modules that access env vars
 
@@ -9,9 +10,16 @@ from fastapi.responses import JSONResponse
 
 from app.asr.whisper import transcribe_wav_bytes
 from app.llm.openai_api import npc_chat
-from app.tts.piper import speaker
+from app.tts.piper import load_voice, speaker
 
-app = FastAPI(title="Bachelorarbeit")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    load_voice()
+    yield
+
+
+app = FastAPI(title="Bachelorarbeit", lifespan=lifespan)
 
 
 @app.get("/health")

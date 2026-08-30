@@ -8,9 +8,9 @@ import traceback
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 
-from app.asr.whisper import transcribe_wav_bytes
-from app.llm.openai_api import npc_chat
-from app.tts.piper import load_voice, speaker
+from backend.app.asr.whisper import transcribe_wav_bytes
+from backend.app.llm.openai_api import npc_chat
+from backend.app.tts.piper import load_voice, speaker
 
 
 @asynccontextmanager

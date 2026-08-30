@@ -1,0 +1,157 @@
+* {
+    box-sizing: border-box;
+}
+
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --text: #000000;
+  --muted: #5c6670;
+  --accent: #2563eb;
+  --accent-hover: #2564eb1e;
+  --recording: #dc2626;
+  --processing: #d97706;
+  --success: #059669;
+  --border: #d8dee4;
+  --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.app {
+  width: min(720px, 100%);
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+}
+
+.app-header {
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.app-header h1 {
+  margin: 0 0 0.25rem;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+}
+
+.app-subtitle {
+  margin: 0;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.vocabulary {
+  text-align: center;
+}
+
+.vocabulary-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.vocabulary-word {
+  margin: 0 0 0.75rem;
+  font-size: clamp(2rem, 6vw, 3rem);
+  font-weight: 700;
+}
+
+.vocabulary-translation {
+  margin: 0 0 1rem;
+  font-size: 1.125rem;
+  color: var(--muted);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.btn {
+  border: none;
+  border-radius: 999px;
+  padding: 0.65rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.recording-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 3rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.recording-dot {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.recording-status[data-state="recording"] .recording-dot {
+  background: var(--recording);
+  transform: scale(1.15);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.recording-status[data-state="processing"] .recording-dot {
+  background: var(--processing);
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+.recording-status[data-state="ready"] .recording-dot,
+.recording-status[data-state="idle"] .recording-dot {
+  background: var(--success);
+}
+
+.recording-hint {
+  margin: 0.75rem 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}

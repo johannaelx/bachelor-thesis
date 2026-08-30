@@ -4,13 +4,17 @@ load_dotenv()  # must run before importing modules that access env vars
 
 import base64
 import traceback
+from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from backend.app.asr.whisper import transcribe_wav_bytes
 from backend.app.llm.openai_api import npc_chat
 from backend.app.tts.piper import load_voice, speaker
+
+FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 
 @asynccontextmanager
@@ -86,3 +90,7 @@ async def conversation(audio: UploadFile = File(...)):
         "reply": llm_response["reply"],
         "audio": audio_b64,
     })
+
+
+# Serve the frontend after API routes so /health and /conversation stay intact.
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bachelorarbeit</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>Vokabel-Trainer</h1>
+        <p class="app-subtitle">Verwende dieses Wort in deiner nächsten Antwort.</p>
+      </header>
+
+      <section class="vocabulary card">
+        <p class="vocabulary-label">Wort</p>
+        <!-- Placeholder vocabulary until the SRS backend provides due words. -->
+        <p class="vocabulary-word" id="target-word">Haus</p>
+        <p class="vocabulary-translation hidden" id="translation">house</p>
+        <button type="button" class="btn" id="show-translation-btn">
+          Übersetzung anzeigen
+        </button>
+      </section>
+
+      <section class="recording card">
+        <div class="recording-status" id="status-indicator" data-state="idle">
+          <span class="recording-dot"></span>
+          <!-- Changes based on current status (e.g. "Ready to record.", "Processing answer..." etc.) -->
+          <span id="status-text">Bereit zur Anufnahme.</span>
+        </div>
+        <p class="recording-hint">Halte die Leertaste gedrückt, um deine Antwort aufzuzeichnen.<br> Lasse sie los, um die Antwort abzusenden.</p>
+      </section>
+
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

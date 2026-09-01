@@ -1,13 +1,13 @@
 import io
 import numpy as np
-import whisper
 import soundfile as sf
+from faster_whisper import WhisperModel
 
 # Whisper expects 16 kHz PCM when a NumPy array is passed to transcribe()
 WHISPER_SR = 16000
 
 # loads the Whisper model once
-model = whisper.load_model("small")
+model = WhisperModel("base.en", device="cpu", compute_type="int8")
 
 
 def resample_pcm(
@@ -67,9 +67,13 @@ def transcribe_pcm(audio_pcm: np.ndarray) -> str:
     if audio_pcm.size == 0:
         return ""
 
-    result = model.transcribe(audio_pcm, fp16=False, task="transcribe")
-
-    return result.get("text", "").strip()
+    segments, _ = model.transcribe(
+        audio_pcm,
+        language="en",
+        beam_size=1,
+        task="transcribe",
+    )
+    return " ".join(segment.text for segment in segments).strip()
 
 
 def transcribe_wav_bytes(wav_bytes: bytes) -> str:

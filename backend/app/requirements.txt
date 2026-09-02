@@ -1,6 +1,5 @@
-openai-whisper
+faster-whisper
 numpy
-torch
 soundfile
 fastapi
 uvicorn

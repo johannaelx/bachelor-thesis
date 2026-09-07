@@ -12,3 +12,4 @@ class Item(Base):
 
     deck: Mapped["Deck"] = relationship(back_populates="items")
     progress: Mapped[list["UserItemProgress"]] = relationship(back_populates="item")
+    messages: Mapped[list["Message"]] = relationship(back_populates="item")

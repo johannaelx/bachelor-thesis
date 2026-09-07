@@ -8,3 +8,4 @@ class Deck(Base):
     name: Mapped[str] = mapped_column()
 
     items: Mapped[list["Item"]] = relationship(back_populates="deck")
+    sessions: Mapped[list["Session"]] = relationship(back_populates="deck")

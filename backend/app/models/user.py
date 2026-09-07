@@ -8,3 +8,4 @@ class User(Base):
     name: Mapped[str] = mapped_column()
 
     progress: Mapped[list["UserItemProgress"]] = relationship(back_populates="user")
+    sessions: Mapped[list["Session"]] = relationship(back_populates="user")

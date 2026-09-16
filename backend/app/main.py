@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.asr.whisper import transcribe_wav_bytes
@@ -16,6 +17,7 @@ from backend.app.llm.openai_api import npc_chat
 from backend.app.tts.piper import load_voice, speaker
 from backend.app.database import get_db
 from backend.app.models.deck import Deck
+from backend.app.models.user import User
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
@@ -29,22 +31,51 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Bachelorarbeit", lifespan=lifespan)
 
 
+class UserCreate(BaseModel):
+    name: str
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
-@app.get("/deck/current")
-def get_current_deck(db: Session = Depends(get_db)):
-    """Returns the first deck with all its items."""
-    deck = db.query(Deck).first()
+@app.get("/users")
+def list_users(db: Session = Depends(get_db)):
+    """Returns all users."""
+    users = db.query(User).all()
+    return [{"id": u.id, "name": u.name} for u in users]
+
+
+@app.post("/users", status_code=201)
+def create_user(body: UserCreate, db: Session = Depends(get_db)):
+    """Creates a new user and returns it."""
+    user = User(name=body.name.strip())
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {"id": user.id, "name": user.name}
+
+
+@app.get("/decks")
+def list_decks(db: Session = Depends(get_db)):
+    """Returns all decks (without items)."""
+    decks = db.query(Deck).all()
+    return [{"id": d.id, "name": d.name} for d in decks]
+
+
+@app.get("/decks/{deck_id}")
+def get_deck(deck_id: int, db: Session = Depends(get_db)):
+    """Returns a single deck with all its items."""
+    deck = db.query(Deck).filter(Deck.id == deck_id).first()
     if not deck:
-        raise HTTPException(status_code=404, detail="No deck found")
+        raise HTTPException(status_code=404, detail="Deck not found")
     items = [
         {"id": item.id, "german": item.german, "english": item.english}
         for item in deck.items
     ]
-    return {"deck_name": deck.name, "items": items}
+    return {"id": deck.id, "deck_name": deck.name, "items": items}
+
 
 conversation_running = False
 

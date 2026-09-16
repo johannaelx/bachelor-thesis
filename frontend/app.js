@@ -1,3 +1,13 @@
+// start screen
+const screenStart = document.getElementById("screen-start");
+const screenSession = document.getElementById("screen-session");
+const profileListEl = document.getElementById("profile-list");
+const deckListEl = document.getElementById("deck-list");
+const newProfileForm = document.getElementById("new-profile-form");
+const newProfileNameInput = document.getElementById("new-profile-name");
+const startBtn = document.getElementById("start-btn");
+
+// session screen
 const targetWordEl = document.getElementById("target-word");
 const translationEl = document.getElementById("translation");
 const showTranslationBtn = document.getElementById("show-translation-btn");
@@ -5,8 +15,12 @@ const statusIndicator = document.getElementById("status-indicator");
 const statusText = document.getElementById("status-text");
 const deckNameEl = document.getElementById("deck-name");
 
+// global
 let items = [];
 let currentItemIndex = 0;
+let currentUserId = null;
+let currentDeckId = null;
+let newProfileName = "";
 
 let translationRevealed = false;
 let isRecording = false;
@@ -17,6 +31,144 @@ let mediaStream = null;
 let sourceNode = null;
 let processorNode = null;
 let recordedSamples = [];
+
+// start screen
+
+async function initStartScreen() {
+  try {
+    const [usersRes, decksRes] = await Promise.all([
+      fetch("/users"),
+      fetch("/decks"),
+    ]);
+
+    if (!usersRes.ok || !decksRes.ok) {
+      throw new Error("Daten konnten nicht geladen werden.");
+    }
+
+    const users = await usersRes.json();
+    const decks = await decksRes.json();
+
+    renderProfiles(users);
+    renderDecks(decks);
+
+    // auto-select deck if only one exists
+    if (decks.length === 1) {
+      selectDeck(decks[0].id);
+    }
+  } catch (err) {
+    console.error(err);
+    alert(err.message || "Fehler beim Laden des Startbildschirms.");
+  }
+}
+
+function createSelectionCard(label, onClick) {
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "selection-card";
+  card.textContent = label;
+  card.addEventListener("click", onClick);
+  return card;
+}
+
+function renderProfiles(users) {
+  profileListEl.innerHTML = "";
+
+  users.forEach((user) => {
+    const card = createSelectionCard(user.name, () => selectProfile(user.id));
+    card.dataset.profileId = String(user.id);
+    profileListEl.appendChild(card);
+  });
+
+  const newCard = createSelectionCard("+ Neues Profil", () => selectProfile("new"));
+  newCard.dataset.profileId = "new";
+  newCard.classList.add("card-dashed");
+  profileListEl.appendChild(newCard);
+}
+
+function renderDecks(decks) {
+  deckListEl.innerHTML = "";
+  decks.forEach((deck) => {
+    const card = createSelectionCard(deck.name, () => selectDeck(deck.id));
+    card.dataset.deckId = String(deck.id);
+    deckListEl.appendChild(card);
+  });
+}
+
+function selectProfile(id) {
+  currentUserId = id;
+
+  profileListEl.querySelectorAll(".selection-card").forEach((card) => {
+    card.classList.toggle("selected", card.dataset.profileId === String(id));
+  });
+
+  if (id === "new") {
+    newProfileForm.classList.remove("hidden");
+    newProfileNameInput.focus();
+  } else {
+    newProfileForm.classList.add("hidden");
+    newProfileName = "";
+    newProfileNameInput.value = "";
+  }
+
+  updateStartBtn();
+}
+
+function selectDeck(id) {
+  currentDeckId = id;
+
+  deckListEl.querySelectorAll(".selection-card").forEach((card) => {
+    card.classList.toggle("selected", card.dataset.deckId === String(id));
+  });
+
+  updateStartBtn();
+}
+
+function updateStartBtn() {
+  const profileReady =
+    typeof currentUserId === "number" ||
+    (currentUserId === "new" && newProfileName.trim().length > 0);
+  const deckReady = currentDeckId !== null;
+  startBtn.disabled = !(profileReady && deckReady);
+}
+
+newProfileNameInput.addEventListener("input", () => {
+  newProfileName = newProfileNameInput.value;
+  updateStartBtn();
+});
+
+startBtn.addEventListener("click", async () => {
+  startBtn.disabled = true;
+  startBtn.textContent = "Wird gestartet…";
+
+  try {
+    // create user in DB if new profile was chosen
+    if (currentUserId === "new") {
+      const res = await fetch("/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newProfileName.trim() }),
+      });
+      if (!res.ok) throw new Error("Benutzer konnte nicht erstellt werden.");
+      const user = await res.json();
+      currentUserId = user.id;
+    }
+
+    await loadDeck();
+
+    // switch to session screen
+    screenStart.classList.add("hidden");
+    screenSession.classList.remove("hidden");
+    setStatus("idle", "Halte die Leertaste gedrückt, um zu sprechen");
+
+  } catch (err) {
+    console.error(err);
+    alert(err.message || "Fehler beim Starten der Session.");
+    startBtn.disabled = false;
+    startBtn.textContent = "Session starten";
+  }
+});
+
+// session screen
 
 function showItem(index) {
   const item = items[index];
@@ -46,21 +198,16 @@ function nextItem() {
 }
 
 async function loadDeck() {
-  try {
-    const response = await fetch("/deck/current");
-    if (!response.ok) throw new Error("Deck nicht gefunden");
-    const data = await response.json();
-    deckNameEl.textContent = `Aktueller Stapel: ${data.deck_name}`;
-    items = data.items;
-    if (items.length > 0) showItem(0);
-  } catch (error) {
-    console.error(error);
-    deckNameEl.textContent = "Fehler beim Laden";
-    targetWordEl.textContent = "–";
+  const response = await fetch(`/decks/${currentDeckId}`);
+  if (!response.ok) throw new Error("Deck nicht gefunden");
+  const data = await response.json();
+  deckNameEl.textContent = `Aktueller Stapel: ${data.deck_name}`;
+  items = data.items;
+  if (items.length > 0) {
+    currentItemIndex = 0;
+    showItem(0);
   }
 }
-
-loadDeck();
 
 function setStatus(state, text) {
   statusIndicator.dataset.state = state;
@@ -208,6 +355,11 @@ async function handleSpaceDown(event) {
     return;
   }
 
+  // only active during session screen
+  if (screenSession.classList.contains("hidden")) {
+    return;
+  }
+
   event.preventDefault();
   spaceHeld = true;
 
@@ -259,4 +411,5 @@ window.addEventListener("blur", () => {
   }
 });
 
-setStatus("idle", "Halte die Leertaste gedrückt, um zu sprechen");
+// init
+initStartScreen();

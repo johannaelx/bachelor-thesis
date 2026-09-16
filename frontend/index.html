@@ -8,6 +8,10 @@
   </head>
   <body>
     <main class="app">
+      <div class="deck-bar">
+        <span class="deck-name" id="deck-name">–</span>
+      </div>
+
       <header class="app-header">
         <h1>Vokabel-Trainer</h1>
         <p class="app-subtitle">Verwende dieses Wort in deiner nächsten Antwort.</p>
@@ -15,9 +19,8 @@
 
       <section class="vocabulary card">
         <p class="vocabulary-label">Wort</p>
-        <!-- Placeholder vocabulary until the SRS backend provides due words. -->
-        <p class="vocabulary-word" id="target-word">Haus</p>
-        <p class="vocabulary-translation hidden" id="translation">house</p>
+        <p class="vocabulary-word" id="target-word">…</p>
+        <p class="vocabulary-translation hidden" id="translation"></p>
         <button type="button" class="btn" id="show-translation-btn">
           Übersetzung anzeigen
         </button>

@@ -6,13 +6,16 @@ import base64
 import traceback
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
 
 from backend.app.asr.whisper import transcribe_wav_bytes
 from backend.app.llm.openai_api import npc_chat
 from backend.app.tts.piper import load_voice, speaker
+from backend.app.database import get_db
+from backend.app.models.deck import Deck
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
@@ -29,6 +32,19 @@ app = FastAPI(title="Bachelorarbeit", lifespan=lifespan)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/deck/current")
+def get_current_deck(db: Session = Depends(get_db)):
+    """Returns the first deck with all its items."""
+    deck = db.query(Deck).first()
+    if not deck:
+        raise HTTPException(status_code=404, detail="No deck found")
+    items = [
+        {"id": item.id, "german": item.german, "english": item.english}
+        for item in deck.items
+    ]
+    return {"deck_name": deck.name, "items": items}
 
 conversation_running = False
 

@@ -7,3 +7,6 @@ python-multipart
 openai
 piper-tts
 python-dotenv
+sqlalchemy
+alembic
+psycopg2-binary

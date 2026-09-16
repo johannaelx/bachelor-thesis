@@ -3,12 +3,10 @@ const translationEl = document.getElementById("translation");
 const showTranslationBtn = document.getElementById("show-translation-btn");
 const statusIndicator = document.getElementById("status-indicator");
 const statusText = document.getElementById("status-text");
+const deckNameEl = document.getElementById("deck-name");
 
-// Placeholder vocabulary until the SRS backend provides due words.
-const vocabulary = {
-  word: "Haus",
-  translation: "house",
-};
+let items = [];
+let currentItemIndex = 0;
 
 let translationRevealed = false;
 let isRecording = false;
@@ -20,7 +18,49 @@ let sourceNode = null;
 let processorNode = null;
 let recordedSamples = [];
 
-targetWordEl.textContent = vocabulary.word;
+function showItem(index) {
+  const item = items[index];
+  if (!item) return;
+  targetWordEl.textContent = item.german;
+  translationEl.textContent = item.english;
+  translationEl.classList.add("hidden");
+  showTranslationBtn.style.display = "";
+  translationRevealed = false;
+}
+
+function showFinished() {
+  targetWordEl.textContent = "🎉";
+  translationEl.classList.add("hidden");
+  showTranslationBtn.style.display = "none";
+  document.querySelector(".vocabulary-label").textContent = "Alle Wörter geübt!";
+}
+
+function nextItem() {
+  const nextIndex = currentItemIndex + 1;
+  if (nextIndex >= items.length) {
+    showFinished();
+    return;
+  }
+  currentItemIndex = nextIndex;
+  showItem(currentItemIndex);
+}
+
+async function loadDeck() {
+  try {
+    const response = await fetch("/deck/current");
+    if (!response.ok) throw new Error("Deck nicht gefunden");
+    const data = await response.json();
+    deckNameEl.textContent = `Aktueller Stapel: ${data.deck_name}`;
+    items = data.items;
+    if (items.length > 0) showItem(0);
+  } catch (error) {
+    console.error(error);
+    deckNameEl.textContent = "Fehler beim Laden";
+    targetWordEl.textContent = "–";
+  }
+}
+
+loadDeck();
 
 function setStatus(state, text) {
   statusIndicator.dataset.state = state;
@@ -153,6 +193,8 @@ async function sendRecording(wavBlob) {
       const audio = new Audio(`data:audio/wav;base64,${data.audio}`);
       await audio.play();
     }
+
+    nextItem();
   } catch (error) {
     console.error(error);
     setStatus("idle", error.message || "Etwas ist schiefgelaufen — probiere es nochmal");
@@ -200,12 +242,8 @@ async function handleSpaceUp(event) {
 }
 
 showTranslationBtn.addEventListener("click", () => {
-  if (translationRevealed) {
-    return;
-  }
-
+  if (translationRevealed) return;
   translationRevealed = true;
-  translationEl.textContent = vocabulary.translation;
   translationEl.classList.remove("hidden");
   showTranslationBtn.style.display = "none";
 });

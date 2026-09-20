@@ -2,7 +2,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from backend.app.models.user_item_progress import UserItemProgress
-from backend.app.sm2 import review as sm2_review
+from backend.app.spaced_repetition.sm2 import review as sm2_review
 
 
 def get_or_create_progress(db: Session, user_id: int, item_id: int) -> UserItemProgress:

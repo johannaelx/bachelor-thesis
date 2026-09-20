@@ -19,7 +19,7 @@ from backend.app.database import get_db
 from backend.app.models.deck import Deck
 from backend.app.models.item import Item
 from backend.app.models.user import User
-from backend.app.progress import apply_and_save_review
+from backend.app.spaced_repetition.progress import apply_and_save_review
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 

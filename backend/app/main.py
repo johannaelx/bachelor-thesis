@@ -6,18 +6,20 @@ import base64
 import traceback
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.asr.whisper import transcribe_wav_bytes
-from backend.app.llm.openai_api import npc_chat
+from backend.app.llm.openai_api import npc_chat, score_vocabulary
 from backend.app.tts.piper import load_voice, speaker
 from backend.app.database import get_db
 from backend.app.models.deck import Deck
+from backend.app.models.item import Item
 from backend.app.models.user import User
+from backend.app.progress import apply_and_save_review
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
@@ -33,6 +35,12 @@ app = FastAPI(title="Bachelorarbeit", lifespan=lifespan)
 
 class UserCreate(BaseModel):
     name: str
+
+
+class ReviewRequest(BaseModel):
+    user_id: int
+    item_id: int
+    q: int
 
 
 @app.get("/health")
@@ -77,16 +85,42 @@ def get_deck(deck_id: int, db: Session = Depends(get_db)):
     return {"id": deck.id, "deck_name": deck.name, "items": items}
 
 
+@app.post("/review")
+def review(body: ReviewRequest, db: Session = Depends(get_db)):
+    """
+    Applies SM-2 for a given user/item/quality score and saves the result.
+    Called directly when the user reveals the translation (q=0).
+    """
+    if body.q not in {0, 2, 5}:
+        raise HTTPException(status_code=400, detail="q muss 0, 2 oder 5 sein.")
+
+    item = db.get(Item, body.item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    user = db.get(User, body.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    result = apply_and_save_review(db, body.user_id, body.item_id, body.q)
+    return {"q": body.q, "sm2": result}
+
+
 conversation_running = False
 
 @app.post("/conversation")
-async def conversation(audio: UploadFile = File(...)):
+async def conversation(
+    audio: UploadFile = File(...),
+    user_id: int = Form(...),
+    item_id: int = Form(...),
+    db: Session = Depends(get_db),
+):
     """
     Processes a spoken user input through the full speech pipeline:
-    ASR (Whisper) -> LLM (gpt-4o-mini) -> TTS (Piper).
+    ASR (Faster Whisper) -> LLM scoring -> SM-2 -> DB -> LLM reply (gpt-4o-mini) -> TTS (Piper).
 
-    Expects a WAV audio file and returns a JSON response containing
-    the reply text and base64-encoded synthesized WAV audio.
+    Expects a WAV audio file plus user_id and item_id as form fields.
+    Returns the NPC reply text, base64-encoded audio, and the SM-2 result.
     """
 
     global conversation_running
@@ -109,11 +143,24 @@ async def conversation(audio: UploadFile = File(...)):
         if len(wav_bytes) == 0:
             raise HTTPException(status_code=400, detail="Empty audio file.")
 
+        item = db.get(Item, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found.")
+
         # ASR
         transcription: str = transcribe_wav_bytes(wav_bytes)
         print("TRANSCRIPTION:", repr(transcription))
 
-        # LLM
+        # LLM scoring
+        scoring: dict = score_vocabulary(item.english, transcription)
+        q: int = scoring["q"]
+        print("SCORING:", repr(scoring))
+
+        # SM-2
+        sm2_result = apply_and_save_review(db, user_id, item_id, q)
+        print("SM2:", repr(sm2_result))
+
+        # LLM reply
         llm_response: dict = npc_chat(transcription)
         print("LLM_RESPONSE:", repr(llm_response))
 
@@ -132,10 +179,11 @@ async def conversation(audio: UploadFile = File(...)):
     # encode WAV audio as base64 for JSON transport
     audio_b64 = base64.b64encode(tts_audio).decode("utf-8")
 
-    # return reply text alongside the synthesized audio
     return JSONResponse(content={
         "reply": llm_response["reply"],
         "audio": audio_b64,
+        "scoring": scoring,
+        "sm2": sm2_result,
     })
 
 

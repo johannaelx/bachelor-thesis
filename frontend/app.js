@@ -321,6 +321,8 @@ async function sendRecording(wavBlob) {
 
   const formData = new FormData();
   formData.append("audio", wavBlob, "recording.wav");
+  formData.append("user_id", currentUserId);
+  formData.append("item_id", items[currentItemIndex].id);
 
   try {
     const response = await fetch("/conversation", {
@@ -393,11 +395,26 @@ async function handleSpaceUp(event) {
   await sendRecording(wavBlob);
 }
 
-showTranslationBtn.addEventListener("click", () => {
+showTranslationBtn.addEventListener("click", async () => {
   if (translationRevealed) return;
   translationRevealed = true;
   translationEl.classList.remove("hidden");
   showTranslationBtn.style.display = "none";
+
+  // automatically score q=0 when translation is revealed
+  try {
+    await fetch("/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: currentUserId,
+        item_id: items[currentItemIndex].id,
+        q: 0,
+      }),
+    });
+  } catch (err) {
+    console.error("Review konnte nicht gespeichert werden:", err);
+  }
 });
 
 window.addEventListener("keydown", handleSpaceDown);

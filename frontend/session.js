@@ -35,7 +35,7 @@ export function nextItem() {
 }
 
 export async function loadDeck() {
-  const response = await fetch(`/decks/${state.currentDeckId}`);
+  const response = await fetch(`/decks/${state.currentDeckId}?user_id=${state.currentUserId}`);
   if (!response.ok) throw new Error("Deck nicht gefunden");
   const data = await response.json();
   deckNameEl.textContent = `Aktueller Stapel: ${data.deck_name}`;
@@ -43,6 +43,8 @@ export async function loadDeck() {
   if (state.items.length > 0) {
     state.currentItemIndex = 0;
     showItem(0);
+  } else {
+    showFinished();
   }
 }
 
@@ -71,4 +73,8 @@ showTranslationBtn.addEventListener("click", async () => {
   } catch (err) {
     console.error("Review konnte nicht gespeichert werden:", err);
   }
+
+  // q=0 always triggers same_day_repeat
+  state.items.push(state.items[state.currentItemIndex]);
+  nextItem();
 });

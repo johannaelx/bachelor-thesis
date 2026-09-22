@@ -4,6 +4,7 @@ load_dotenv()  # must run before importing modules that access env vars
 
 import base64
 import traceback
+from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
@@ -19,6 +20,7 @@ from backend.app.database import get_db
 from backend.app.models.deck import Deck
 from backend.app.models.item import Item
 from backend.app.models.user import User
+from backend.app.models.user_item_progress import UserItemProgress
 from backend.app.spaced_repetition.progress import apply_and_save_review
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
@@ -73,16 +75,21 @@ def list_decks(db: Session = Depends(get_db)):
 
 
 @app.get("/decks/{deck_id}")
-def get_deck(deck_id: int, db: Session = Depends(get_db)):
-    """Returns a single deck with all its items."""
-    deck = db.query(Deck).filter(Deck.id == deck_id).first()
+def get_deck(deck_id: int, user_id: int, db: Session = Depends(get_db)):
+    """Returns a deck with only the items due for review today for the given user."""
+    deck = db.get(Deck, deck_id)
     if not deck:
         raise HTTPException(status_code=404, detail="Deck not found")
-    items = [
-        {"id": item.id, "german": item.german, "english": item.english}
-        for item in deck.items
-    ]
-    return {"id": deck.id, "deck_name": deck.name, "items": items}
+
+    today = date.today()
+    due_items = []
+    for item in deck.items:
+        progress = db.get(UserItemProgress, (user_id, item.id))
+        # include item if never reviewed, due today or overdue
+        if progress is None or progress.next_review is None or progress.next_review <= today:
+            due_items.append({"id": item.id, "german": item.german, "english": item.english})
+
+    return {"id": deck.id, "deck_name": deck.name, "items": due_items}
 
 
 @app.post("/review")

@@ -132,6 +132,11 @@ async function sendRecording(wavBlob) {
       await audio.play();
     }
 
+    // if item was answered incorrectly, repeat it later in same session
+    if (data.sm2?.same_day_repeat) {
+      state.items.push(state.items[state.currentItemIndex]);
+    }
+
     nextItem();
   } catch (error) {
     console.error(error);

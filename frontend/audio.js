@@ -112,6 +112,7 @@ async function sendRecording(wavBlob) {
   formData.append("audio", wavBlob, "recording.wav");
   formData.append("user_id", state.currentUserId);
   formData.append("item_id", state.items[state.currentItemIndex].id);
+  formData.append("translation_revealed", state.translationRevealed);
 
   try {
     const response = await fetch("/conversation", {

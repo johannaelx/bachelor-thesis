@@ -53,28 +53,9 @@ export function setStatus(stateStr, text) {
   statusText.textContent = text;
 }
 
-showTranslationBtn.addEventListener("click", async () => {
+showTranslationBtn.addEventListener("click", () => {
   if (state.translationRevealed) return;
   state.translationRevealed = true;
   translationEl.classList.remove("hidden");
   showTranslationBtn.style.display = "none";
-
-  // automatically score q=0 when translation is revealed
-  try {
-    await fetch("/review", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: state.currentUserId,
-        item_id: state.items[state.currentItemIndex].id,
-        q: 0,
-      }),
-    });
-  } catch (err) {
-    console.error("Review konnte nicht gespeichert werden:", err);
-  }
-
-  // q=0 always triggers same_day_repeat
-  state.items.push(state.items[state.currentItemIndex]);
-  nextItem();
 });

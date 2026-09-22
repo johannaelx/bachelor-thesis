@@ -120,6 +120,7 @@ async def conversation(
     audio: UploadFile = File(...),
     user_id: int = Form(...),
     item_id: int = Form(...),
+    translation_revealed: bool = Form(False),
     db: Session = Depends(get_db),
 ):
     """
@@ -159,9 +160,13 @@ async def conversation(
         print("TRANSCRIPTION:", repr(transcription))
 
         # LLM scoring
-        scoring: dict = score_vocabulary(item.english, transcription)
+        if translation_revealed:
+            scoring = {"target_word": item.english, "q": 0}
+            print("SCORING: q=0 (translation revealed)")
+        else:
+            scoring = score_vocabulary(item.english, transcription)
+            print("SCORING:", repr(scoring))
         q: int = scoring["q"]
-        print("SCORING:", repr(scoring))
 
         # SM-2
         sm2_result = apply_and_save_review(db, user_id, item_id, q)

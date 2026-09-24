@@ -106,13 +106,36 @@ startBtn.addEventListener("click", async () => {
     // switch to session screen
     screenStart.classList.add("hidden");
     screenSession.classList.remove("hidden");
-    setStatus("idle", "Halte die Leertaste gedrückt, um zu sprechen");
+
+    // NPC opens the conversation
+    setStatus("processing", "NPC spricht...");
+    state.npcSpeaking = true;
+
+    const greetRes = await fetch("/conversation/start", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        user_id: state.currentUserId,
+        item_id: state.items[0].id,
+      }),
+    });
+
+    if (!greetRes.ok) throw new Error("Gespräch konnte nicht gestartet werden.");
+    const greetData = await greetRes.json();
+
+    if (greetData.audio) {
+      const audio = new Audio(`data:audio/wav;base64,${greetData.audio}`);
+      await audio.play();
+    }
 
   } catch (err) {
     console.error(err);
     alert(err.message || "Fehler beim Starten der Session.");
     startBtn.disabled = false;
     startBtn.textContent = "Session starten";
+  } finally {
+    state.npcSpeaking = false;
+    setStatus("idle", "Halte die Leertaste gedrückt, um zu sprechen.");
   }
 });
 

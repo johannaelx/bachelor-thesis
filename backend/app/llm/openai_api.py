@@ -25,6 +25,47 @@ NPC_MEMORY = deque(maxlen=6)
 # prompt files
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "prompts" / "default.txt"
 SCORE_PROMPT_PATH = Path(__file__).parent / "prompts" / "score_vocabulary.txt"
+GREETING_PROMPT_PATH = Path(__file__).parent / "prompts" / "greeting.txt"
+
+def reset_memory() -> None:
+    """
+    Clears the NPC dialogue memory. Should be called at the start of each session.
+    """
+    NPC_MEMORY.clear()
+
+def npc_greeting(target_word: str) -> dict:
+    """
+    Generates an opening message from the NPC at the start of a session. Seeds NPC_Memory.
+    """
+    with open(GREETING_PROMPT_PATH, "r", encoding="utf") as f:
+        system_prompt = f.read()
+    
+    user_prompt = f"""
+    Target word: "{target_word}"
+
+    Respond in JSON only.
+    """
+
+    response = client.chat.completions.create(
+        model=API_MODEL_NAME,
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.7,
+    )
+
+    raw = response.choices[0].message.content
+    try:
+        parsed = json.loads(raw)
+        reply_text = parsed.get("reply", "")
+    except json.JSONDecodeError:
+        reply_text = raw
+        parsed = {"reply": reply_text}
+    
+    NPC_MEMORY.append({"role": "assistant", "content": reply_text})
+
+    return parsed
 
 def load_system_prompt() -> str:
     """

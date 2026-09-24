@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.asr.whisper import transcribe_wav_bytes
-from backend.app.llm.openai_api import npc_chat, score_vocabulary
+from backend.app.llm.openai_api import npc_chat, score_vocabulary, npc_greeting, reset_memory
 from backend.app.tts.piper import load_voice, speaker
 from backend.app.database import get_db
 from backend.app.models.deck import Deck
@@ -38,11 +38,14 @@ app = FastAPI(title="Bachelorarbeit", lifespan=lifespan)
 class UserCreate(BaseModel):
     name: str
 
-
 class ReviewRequest(BaseModel):
     user_id: int
     item_id: int
     q: int
+
+class ConversationStartRequest(BaseModel):
+    user_id: int
+    item_id: int
 
 
 @app.get("/health")
@@ -114,6 +117,29 @@ def review(body: ReviewRequest, db: Session = Depends(get_db)):
 
 
 conversation_running = False
+
+@app.post("/conversation/start")
+def conversation_start(body: ConversationStartRequest, db: Session = Depends(get_db)):
+    """
+    Starts a new session: resets NPC memory and generates an opening question.
+    Returns the NPC greeting text and base64-encoded TTS audio.
+    """
+    item = db.get(Item, body.item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    reset_memory()
+
+    llm_response: dict = npc_greeting(item.english)
+    print("GREETING:", repr(llm_response))
+
+    tts_audio: bytes = speaker(llm_response["reply"])
+    audio_b64 = base64.b64encode(tts_audio).decode("utf-8")
+
+    return JSONResponse(content={
+        "reply": llm_response["reply"],
+        "audio": audio_b64,
+    })
 
 @app.post("/conversation")
 async def conversation(

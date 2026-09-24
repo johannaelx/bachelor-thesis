@@ -126,11 +126,18 @@ async function sendRecording(wavBlob) {
     }
 
     const data = await response.json();
-    setStatus("ready", "Antwort verarbeitet — halte die Leertaste gedrückt, um erneut zu sprechen");
-
     if (data.audio) {
-      const audio = new Audio(`data:audio/wav;base64,${data.audio}`);
-      await audio.play();
+      state.npcSpeaking = true;
+      setStatus("processing", "NPC spricht...");
+      const audio = new Audio(`data:audio/wav;base64,${(data.audio)}`)
+      await new Promise((resolve) => {
+        audio.onended = resolve;
+        audio.play();
+      });
+      state.npcSpeaking = false;
+      setStatus("idle", "Halte die Leertaste gedrückt, um erneut zu sprechen.");
+    } else {
+      setStatus("idle", "Halte die Leertaste gedrückt, um erneut zu sprechen.")
     }
 
     // if item was answered incorrectly, repeat it later in same session
@@ -154,6 +161,11 @@ async function handleSpaceDown(event) {
 
   // only active during session screen
   if (screenSession.classList.contains("hidden")) {
+    return;
+  }
+
+  // block recording while NPC greeting is playing
+  if (state.npcSpeaking) {
     return;
   }
 

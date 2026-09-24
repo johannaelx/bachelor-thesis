@@ -4,18 +4,24 @@ load_dotenv()  # must run before importing modules that access env vars
 
 import base64
 import traceback
+from datetime import date
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.asr.whisper import transcribe_wav_bytes
-from backend.app.llm.openai_api import npc_chat
+from backend.app.llm.openai_api import npc_chat, score_vocabulary
 from backend.app.tts.piper import load_voice, speaker
 from backend.app.database import get_db
 from backend.app.models.deck import Deck
+from backend.app.models.item import Item
+from backend.app.models.user import User
+from backend.app.models.user_item_progress import UserItemProgress
+from backend.app.spaced_repetition.progress import apply_and_save_review
 
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
@@ -29,33 +35,100 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Bachelorarbeit", lifespan=lifespan)
 
 
+class UserCreate(BaseModel):
+    name: str
+
+
+class ReviewRequest(BaseModel):
+    user_id: int
+    item_id: int
+    q: int
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
-@app.get("/deck/current")
-def get_current_deck(db: Session = Depends(get_db)):
-    """Returns the first deck with all its items."""
-    deck = db.query(Deck).first()
+@app.get("/users")
+def list_users(db: Session = Depends(get_db)):
+    """Returns all users."""
+    users = db.query(User).all()
+    return [{"id": u.id, "name": u.name} for u in users]
+
+
+@app.post("/users", status_code=201)
+def create_user(body: UserCreate, db: Session = Depends(get_db)):
+    """Creates a new user and returns it."""
+    user = User(name=body.name.strip())
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {"id": user.id, "name": user.name}
+
+
+@app.get("/decks")
+def list_decks(db: Session = Depends(get_db)):
+    """Returns all decks (without items)."""
+    decks = db.query(Deck).all()
+    return [{"id": d.id, "name": d.name} for d in decks]
+
+
+@app.get("/decks/{deck_id}")
+def get_deck(deck_id: int, user_id: int, db: Session = Depends(get_db)):
+    """Returns a deck with only the items due for review today for the given user."""
+    deck = db.get(Deck, deck_id)
     if not deck:
-        raise HTTPException(status_code=404, detail="No deck found")
-    items = [
-        {"id": item.id, "german": item.german, "english": item.english}
-        for item in deck.items
-    ]
-    return {"deck_name": deck.name, "items": items}
+        raise HTTPException(status_code=404, detail="Deck not found")
+
+    today = date.today()
+    due_items = []
+    for item in deck.items:
+        progress = db.get(UserItemProgress, (user_id, item.id))
+        # include item if never reviewed, due today or overdue
+        if progress is None or progress.next_review is None or progress.next_review <= today:
+            due_items.append({"id": item.id, "german": item.german, "english": item.english})
+
+    return {"id": deck.id, "deck_name": deck.name, "items": due_items}
+
+
+@app.post("/review")
+def review(body: ReviewRequest, db: Session = Depends(get_db)):
+    """
+    Applies SM-2 for a given user/item/quality score and saves the result.
+    Called directly when the user reveals the translation (q=0).
+    """
+    if body.q not in {0, 2, 5}:
+        raise HTTPException(status_code=400, detail="q muss 0, 2 oder 5 sein.")
+
+    item = db.get(Item, body.item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    user = db.get(User, body.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    result = apply_and_save_review(db, body.user_id, body.item_id, body.q)
+    return {"q": body.q, "sm2": result}
+
 
 conversation_running = False
 
 @app.post("/conversation")
-async def conversation(audio: UploadFile = File(...)):
+async def conversation(
+    audio: UploadFile = File(...),
+    user_id: int = Form(...),
+    item_id: int = Form(...),
+    translation_revealed: bool = Form(False),
+    db: Session = Depends(get_db),
+):
     """
     Processes a spoken user input through the full speech pipeline:
-    ASR (Whisper) -> LLM (gpt-4o-mini) -> TTS (Piper).
+    ASR (Faster Whisper) -> LLM scoring -> SM-2 -> DB -> LLM reply (gpt-4o-mini) -> TTS (Piper).
 
-    Expects a WAV audio file and returns a JSON response containing
-    the reply text and base64-encoded synthesized WAV audio.
+    Expects a WAV audio file plus user_id and item_id as form fields.
+    Returns the NPC reply text, base64-encoded audio, and the SM-2 result.
     """
 
     global conversation_running
@@ -78,11 +151,28 @@ async def conversation(audio: UploadFile = File(...)):
         if len(wav_bytes) == 0:
             raise HTTPException(status_code=400, detail="Empty audio file.")
 
+        item = db.get(Item, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found.")
+
         # ASR
         transcription: str = transcribe_wav_bytes(wav_bytes)
         print("TRANSCRIPTION:", repr(transcription))
 
-        # LLM
+        # LLM scoring
+        if translation_revealed:
+            scoring = {"target_word": item.english, "q": 0}
+            print("SCORING: q=0 (translation revealed)")
+        else:
+            scoring = score_vocabulary(item.english, transcription)
+            print("SCORING:", repr(scoring))
+        q: int = scoring["q"]
+
+        # SM-2
+        sm2_result = apply_and_save_review(db, user_id, item_id, q)
+        print("SM2:", repr(sm2_result))
+
+        # LLM reply
         llm_response: dict = npc_chat(transcription)
         print("LLM_RESPONSE:", repr(llm_response))
 
@@ -101,10 +191,11 @@ async def conversation(audio: UploadFile = File(...)):
     # encode WAV audio as base64 for JSON transport
     audio_b64 = base64.b64encode(tts_audio).decode("utf-8")
 
-    # return reply text alongside the synthesized audio
     return JSONResponse(content={
         "reply": llm_response["reply"],
         "audio": audio_b64,
+        "scoring": scoring,
+        "sm2": sm2_result,
     })
 
 

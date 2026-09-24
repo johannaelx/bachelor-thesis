@@ -1,10 +1,15 @@
 from backend.app.database import SessionLocal
+from backend.app.models.user import User
 from backend.app.models.deck import Deck
 from backend.app.models.item import Item
 
 def seed():
     db = SessionLocal()
     try:
+        user = User(name="Testnutzer")
+        db.add(user)
+        db.flush()
+
         deck = Deck(name="Grundvokabular")
         db.add(deck)
         db.flush()
@@ -16,6 +21,7 @@ def seed():
         ]
         db.add_all(items)
         db.commit()
+        print(f"Seeded user '{user.name}' (id={user.id})")
         print(f"Seeded {len(items)} items into deck '{deck.name}'")
     finally:
         db.close()

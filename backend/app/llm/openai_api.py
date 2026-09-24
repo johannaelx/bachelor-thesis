@@ -1,6 +1,5 @@
 import os
 import json
-from typing import Dict
 from pathlib import Path
 from openai import OpenAI
 from collections import deque
@@ -23,8 +22,9 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # short-term dialogue memory
 NPC_MEMORY = deque(maxlen=6)
 
-# prompt file
+# prompt files
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "prompts" / "default.txt"
+SCORE_PROMPT_PATH = Path(__file__).parent / "prompts" / "score_vocabulary.txt"
 
 def load_system_prompt() -> str:
     """
@@ -68,7 +68,7 @@ def npc_api(user_text: str) -> str:
     return response.choices[0].message.content
 
 
-def npc_chat(user_text: str) -> Dict:
+def npc_chat(user_text: str) -> dict:
     """
     High-level wrapper used by the backend conversation pipeline.
     Parses the JSON reply from the LLM.
@@ -88,3 +88,40 @@ def npc_chat(user_text: str) -> Dict:
     NPC_MEMORY.append({"role": "assistant", "content": reply_text})
 
     return parsed
+
+
+def score_vocabulary(target_word: str, transcription: str) -> dict:
+    """
+    Asks the LLM to score how well the target word was used in the transcription.
+    Returns a dict with "target_word" and "q" ∈ {0, 2, 5}.
+    Falls back to q=0 if the response cannot be parsed.
+    """
+    with open(SCORE_PROMPT_PATH, "r", encoding="utf-8") as f:
+        system_prompt = f.read()
+
+    user_prompt = f"""
+    Target word: "{target_word}"
+    Learner's sentence: "{transcription}"
+
+    Respond in JSON only.
+    """
+
+    response = client.chat.completions.create(
+        model=API_MODEL_NAME,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0,
+    )
+
+    raw = response.choices[0].message.content
+    try:
+        parsed = json.loads(raw)
+        q = int(parsed.get("q", 0))
+        if q not in {0, 2, 5}:
+            q = 0
+    except (json.JSONDecodeError, ValueError):
+        q = 0
+
+    return {"target_word": target_word, "q": q}

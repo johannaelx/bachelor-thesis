@@ -125,7 +125,10 @@ startBtn.addEventListener("click", async () => {
 
     if (greetData.audio) {
       const audio = new Audio(`data:audio/wav;base64,${greetData.audio}`);
-      await audio.play();
+      await new Promise((resolve) => {
+        audio.onended = resolve;
+        audio.play();
+      });
     }
 
   } catch (err) {

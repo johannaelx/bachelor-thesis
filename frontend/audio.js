@@ -108,11 +108,16 @@ async function sendRecording(wavBlob) {
   state.isProcessing = true;
   setStatus("processing", "Deine Antwort wird verarbeitet…");
 
+  const nextVocabItem = state.items[state.currentItemIndex + 1];
+
   const formData = new FormData();
   formData.append("audio", wavBlob, "recording.wav");
   formData.append("user_id", state.currentUserId);
   formData.append("item_id", state.items[state.currentItemIndex].id);
   formData.append("translation_revealed", state.translationRevealed);
+  if (nextVocabItem) {
+    formData.append("next_item_id", nextVocabItem.id);
+  }
 
   try {
     const response = await fetch("/conversation", {

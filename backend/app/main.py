@@ -147,6 +147,7 @@ async def conversation(
     user_id: int = Form(...),
     item_id: int = Form(...),
     translation_revealed: bool = Form(False),
+    next_item_id: int | None = Form(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -198,8 +199,15 @@ async def conversation(
         sm2_result = apply_and_save_review(db, user_id, item_id, q)
         print("SM2:", repr(sm2_result))
 
+        # next target_word for NPC reply
+        next_target_word: str | None = None
+        if next_item_id is not None:
+            next_item = db.get(Item, next_item_id)
+            if next_item:
+                next_target_word = next_item.english
+
         # LLM reply
-        llm_response: dict = npc_chat(transcription)
+        llm_response: dict = npc_chat(transcription, next_target_word)
         print("LLM_RESPONSE:", repr(llm_response))
 
         # TTS

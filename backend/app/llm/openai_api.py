@@ -76,16 +76,20 @@ def load_system_prompt() -> str:
         return f.read()
 
 
-def npc_api(user_text: str) -> str:
+def npc_api(user_text: str, next_target_word: str | None = None) -> str:
     """
     Sends the user's utterance to the LLM and returns a JSON-formatted response.
     """
     system_prompt = load_system_prompt()
 
+    next_word_instruction = ""
+    if next_target_word:
+        next_word_instruction = f'\nNext vocabulary target for the learner: "{next_target_word}". Naturally work a question or remark into your reply that leads the learner to use this word. DO NOT USE THE WORD YOURSELF:'
+
     user_prompt = f"""
     Player said:
     "{user_text}"
-
+    {next_word_instruction}
     Respond in JSON only.
     """
 
@@ -109,13 +113,13 @@ def npc_api(user_text: str) -> str:
     return response.choices[0].message.content
 
 
-def npc_chat(user_text: str) -> dict:
+def npc_chat(user_text: str, next_target_word: str | None = None) -> dict:
     """
     High-level wrapper used by the backend conversation pipeline.
     Parses the JSON reply from the LLM.
     """
 
-    raw_response = npc_api(user_text)
+    raw_response = npc_api(user_text, next_target_word)
 
     try:
         parsed = json.loads(raw_response)

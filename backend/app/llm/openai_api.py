@@ -26,6 +26,7 @@ NPC_MEMORY = deque(maxlen=6)
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "prompts" / "default.txt"
 SCORE_PROMPT_PATH = Path(__file__).parent / "prompts" / "score_vocabulary.txt"
 GREETING_PROMPT_PATH = Path(__file__).parent / "prompts" / "greeting.txt"
+NEXT_WORD_PROMPT_PATH = Path(__file__).parent / "prompts" / "next_word.txt"
 
 def reset_memory() -> None:
     """
@@ -37,7 +38,7 @@ def npc_greeting(target_word: str) -> dict:
     """
     Generates an opening message from the NPC at the start of a session. Seeds NPC_Memory.
     """
-    with open(GREETING_PROMPT_PATH, "r", encoding="utf") as f:
+    with open(GREETING_PROMPT_PATH, "r", encoding="utf-8") as f:
         system_prompt = f.read()
     
     user_prompt = f"""
@@ -84,7 +85,8 @@ def npc_api(user_text: str, next_target_word: str | None = None) -> str:
 
     next_word_instruction = ""
     if next_target_word:
-        next_word_instruction = f'\nNext vocabulary target for the learner: "{next_target_word}". Naturally work a question or remark into your reply that leads the learner to use this word. DO NOT USE THE WORD YOURSELF:'
+        with open(NEXT_WORD_PROMPT_PATH, "r", encoding="utf-8") as f:
+            next_word_instruction = f.read().format(next_target_word=next_target_word)
 
     user_prompt = f"""
     Player said:

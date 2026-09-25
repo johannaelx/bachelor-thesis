@@ -1,0 +1,3 @@
+Next vocabulary target for the learner: "{next_target_word}".
+Naturally work a question or remark into your reply that leads the learner to use this word. 
+DO NOT USE THE WORD YOURSELF.

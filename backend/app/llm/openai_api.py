@@ -25,7 +25,6 @@ NPC_MEMORY = deque(maxlen=6)
 # prompt files
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "prompts" / "default.txt"
 SCORE_PROMPT_PATH = Path(__file__).parent / "prompts" / "score_vocabulary.txt"
-GREETING_PROMPT_PATH = Path(__file__).parent / "prompts" / "greeting.txt"
 NEXT_WORD_PROMPT_PATH = Path(__file__).parent / "prompts" / "next_word.txt"
 
 def reset_memory() -> None:
@@ -34,16 +33,21 @@ def reset_memory() -> None:
     """
     NPC_MEMORY.clear()
 
+
+def load_next_word_instruction(next_target_word: str) -> str:
+    with open(NEXT_WORD_PROMPT_PATH, "r", encoding="utf-8") as f:
+        return f.read().format(next_target_word=next_target_word)
+
+
 def npc_greeting(target_word: str) -> dict:
     """
     Generates an opening message from the NPC at the start of a session. Seeds NPC_Memory.
     """
-    with open(GREETING_PROMPT_PATH, "r", encoding="utf-8") as f:
-        system_prompt = f.read()
-    
+    system_prompt = load_system_prompt()
+    next_word_instruction = load_next_word_instruction(target_word)
     user_prompt = f"""
-    Target word: "{target_word}"
-
+    This is the opening message of the session. The learner has not spoken yet.
+    {next_word_instruction}
     Respond in JSON only.
     """
 
@@ -85,8 +89,7 @@ def npc_api(user_text: str, next_target_word: str | None = None) -> str:
 
     next_word_instruction = ""
     if next_target_word:
-        with open(NEXT_WORD_PROMPT_PATH, "r", encoding="utf-8") as f:
-            next_word_instruction = f.read().format(next_target_word=next_target_word)
+        next_word_instruction = load_next_word_instruction(next_target_word)
 
     user_prompt = f"""
     Player said:

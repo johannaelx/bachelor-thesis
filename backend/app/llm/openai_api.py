@@ -25,6 +25,52 @@ NPC_MEMORY = deque(maxlen=6)
 # prompt files
 SYSTEM_PROMPT_PATH = Path(__file__).parent / "prompts" / "default.txt"
 SCORE_PROMPT_PATH = Path(__file__).parent / "prompts" / "score_vocabulary.txt"
+NEXT_WORD_PROMPT_PATH = Path(__file__).parent / "prompts" / "next_word.txt"
+
+def reset_memory() -> None:
+    """
+    Clears the NPC dialogue memory. Should be called at the start of each session.
+    """
+    NPC_MEMORY.clear()
+
+
+def load_next_word_instruction(next_target_word: str) -> str:
+    with open(NEXT_WORD_PROMPT_PATH, "r", encoding="utf-8") as f:
+        return f.read().format(next_target_word=next_target_word)
+
+
+def npc_greeting(target_word: str) -> dict:
+    """
+    Generates an opening message from the NPC at the start of a session. Seeds NPC_Memory.
+    """
+    system_prompt = load_system_prompt()
+    next_word_instruction = load_next_word_instruction(target_word)
+    user_prompt = f"""
+    This is the opening message of the session. The learner has not spoken yet.
+    {next_word_instruction}
+    Respond in JSON only.
+    """
+
+    response = client.chat.completions.create(
+        model=API_MODEL_NAME,
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.7,
+    )
+
+    raw = response.choices[0].message.content
+    try:
+        parsed = json.loads(raw)
+        reply_text = parsed.get("reply", "")
+    except json.JSONDecodeError:
+        reply_text = raw
+        parsed = {"reply": reply_text}
+    
+    NPC_MEMORY.append({"role": "assistant", "content": reply_text})
+
+    return parsed
 
 def load_system_prompt() -> str:
     """
@@ -35,16 +81,20 @@ def load_system_prompt() -> str:
         return f.read()
 
 
-def npc_api(user_text: str) -> str:
+def npc_api(user_text: str, next_target_word: str | None = None) -> str:
     """
     Sends the user's utterance to the LLM and returns a JSON-formatted response.
     """
     system_prompt = load_system_prompt()
 
+    next_word_instruction = ""
+    if next_target_word:
+        next_word_instruction = load_next_word_instruction(next_target_word)
+
     user_prompt = f"""
     Player said:
     "{user_text}"
-
+    {next_word_instruction}
     Respond in JSON only.
     """
 
@@ -68,13 +118,13 @@ def npc_api(user_text: str) -> str:
     return response.choices[0].message.content
 
 
-def npc_chat(user_text: str) -> dict:
+def npc_chat(user_text: str, next_target_word: str | None = None) -> dict:
     """
     High-level wrapper used by the backend conversation pipeline.
     Parses the JSON reply from the LLM.
     """
 
-    raw_response = npc_api(user_text)
+    raw_response = npc_api(user_text, next_target_word)
 
     try:
         parsed = json.loads(raw_response)

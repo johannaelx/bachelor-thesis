@@ -1,0 +1,15 @@
+Next vocabulary target for the learner: "{next_target_word}".
+
+Goal:
+Naturally guide the learner to use the exact target word in their next response.
+
+Strict Restrictions:
+- DO NOT use the target word "{next_target_word}".
+- DO NOT use direct synonyms or near-synonyms of the target word.
+- DO NOT explicitly name the word's definition using synonymous terms.
+
+Approved Strategies to Elicit the Word:
+- Ask for the OPPOSITE (e.g., if target is "cold": "How is the weather in the Sahara? It's not warm, it's...")
+- Describe a SITUATION or SCENARIO where the word is the most natural answer.
+- Ask a CHOICE question (e.g., "Do you prefer X or the opposite?").
+- Use an ASSOCIATED ACTION or OBJECT (e.g., if target is "keys": "What do you usually lose right before leaving the house?").

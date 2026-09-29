@@ -12,6 +12,7 @@ export const state = {
 
   // session UI
   translationRevealed: false,
+  npcSpeaking: false,
 
   // audio recording
   isRecording: false,

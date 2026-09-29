@@ -108,11 +108,16 @@ async function sendRecording(wavBlob) {
   state.isProcessing = true;
   setStatus("processing", "Deine Antwort wird verarbeitet…");
 
+  const nextVocabItem = state.items[state.currentItemIndex + 1];
+
   const formData = new FormData();
   formData.append("audio", wavBlob, "recording.wav");
   formData.append("user_id", state.currentUserId);
   formData.append("item_id", state.items[state.currentItemIndex].id);
   formData.append("translation_revealed", state.translationRevealed);
+  if (nextVocabItem) {
+    formData.append("next_item_id", nextVocabItem.id);
+  }
 
   try {
     const response = await fetch("/conversation", {
@@ -126,19 +131,27 @@ async function sendRecording(wavBlob) {
     }
 
     const data = await response.json();
-    setStatus("ready", "Antwort verarbeitet — halte die Leertaste gedrückt, um erneut zu sprechen");
-
-    if (data.audio) {
-      const audio = new Audio(`data:audio/wav;base64,${data.audio}`);
-      await audio.play();
-    }
 
     // if item was answered incorrectly, repeat it later in same session
     if (data.sm2?.same_day_repeat) {
       state.items.push(state.items[state.currentItemIndex]);
     }
 
-    nextItem();
+    if (data.audio) {
+      nextItem();
+      state.npcSpeaking = true;
+      setStatus("processing", "NPC spricht...");
+      const audio = new Audio(`data:audio/wav;base64,${(data.audio)}`)
+      await new Promise((resolve) => {
+        audio.onended = resolve;
+        audio.play();
+      });
+      state.npcSpeaking = false;
+      setStatus("idle", "Halte die Leertaste gedrückt, um erneut zu sprechen.");
+    } else {
+      nextItem();
+      setStatus("idle", "Halte die Leertaste gedrückt, um erneut zu sprechen.")
+    }
   } catch (error) {
     console.error(error);
     setStatus("idle", error.message || "Etwas ist schiefgelaufen — probiere es nochmal");
@@ -154,6 +167,11 @@ async function handleSpaceDown(event) {
 
   // only active during session screen
   if (screenSession.classList.contains("hidden")) {
+    return;
+  }
+
+  // block recording while NPC greeting is playing
+  if (state.npcSpeaking) {
     return;
   }
 

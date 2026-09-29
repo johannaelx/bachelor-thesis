@@ -131,7 +131,14 @@ async function sendRecording(wavBlob) {
     }
 
     const data = await response.json();
+
+    // if item was answered incorrectly, repeat it later in same session
+    if (data.sm2?.same_day_repeat) {
+      state.items.push(state.items[state.currentItemIndex]);
+    }
+
     if (data.audio) {
+      nextItem();
       state.npcSpeaking = true;
       setStatus("processing", "NPC spricht...");
       const audio = new Audio(`data:audio/wav;base64,${(data.audio)}`)
@@ -142,15 +149,9 @@ async function sendRecording(wavBlob) {
       state.npcSpeaking = false;
       setStatus("idle", "Halte die Leertaste gedrückt, um erneut zu sprechen.");
     } else {
+      nextItem();
       setStatus("idle", "Halte die Leertaste gedrückt, um erneut zu sprechen.")
     }
-
-    // if item was answered incorrectly, repeat it later in same session
-    if (data.sm2?.same_day_repeat) {
-      state.items.push(state.items[state.currentItemIndex]);
-    }
-
-    nextItem();
   } catch (error) {
     console.error(error);
     setStatus("idle", error.message || "Etwas ist schiefgelaufen — probiere es nochmal");

@@ -15,4 +15,7 @@ class Session(Base):
 
     user: Mapped["User"] = relationship(back_populates="sessions")
     deck: Mapped["Deck"] = relationship(back_populates="sessions")
-    messages: Mapped[list["Message"]] = relationship(back_populates="session")
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="session",
+        order_by="Message.sequence",
+    )

@@ -1,5 +1,5 @@
 import { state } from "./state.js";
-import { nextItem, setStatus } from "./session.js";
+import { isSessionAbortError, nextItem, setStatus } from "./session.js";
 
 const screenSession = document.getElementById("screen-session");
 
@@ -84,6 +84,48 @@ function startRecording() {
   setStatus("recording", "Aufnahme läuft… lasse die Leertaste los, um die Antwort zu versenden");
 }
 
+export function playNpcAudio(base64, signal) {
+  stopNpcAudio();
+
+  if (signal?.aborted) {
+    return Promise.resolve();
+  }
+
+  const audio = new Audio(`data:audio/wav;base64,${base64}`);
+  state.activeAudio = audio;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      if (state.activeAudio === audio) {
+        state.activeAudio = null;
+      }
+      resolve();
+    };
+
+    const onAbort = () => {
+      audio.pause();
+      finish();
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+    audio.addEventListener("ended", finish);
+    audio.addEventListener("error", finish);
+    audio.play().catch(finish);
+  });
+}
+
+export function stopNpcAudio() {
+  const audio = state.activeAudio;
+  if (!audio) return;
+  state.activeAudio = null;
+  audio.pause();
+  audio.dispatchEvent(new Event("ended"));
+}
+
 function stopRecording() {
   if (!state.isRecording) {
     return null;
@@ -105,6 +147,11 @@ function stopRecording() {
 }
 
 async function sendRecording(wavBlob) {
+  const signal = state.sessionAbortController?.signal;
+  if (!signal || signal.aborted) {
+    return;
+  }
+
   state.isProcessing = true;
   setStatus("processing", "Deine Antwort wird verarbeitet…");
 
@@ -124,6 +171,7 @@ async function sendRecording(wavBlob) {
     const response = await fetch("/conversation", {
       method: "POST",
       body: formData,
+      signal,
     });
 
     if (!response.ok) {
@@ -132,6 +180,7 @@ async function sendRecording(wavBlob) {
     }
 
     const data = await response.json();
+    if (signal.aborted) return;
 
     // if item was answered incorrectly, repeat it later in same session
     if (data.sm2?.same_day_repeat) {
@@ -140,24 +189,28 @@ async function sendRecording(wavBlob) {
 
     if (data.audio) {
       nextItem();
+      if (signal.aborted) return;
       state.npcSpeaking = true;
       setStatus("processing", "NPC spricht...");
-      const audio = new Audio(`data:audio/wav;base64,${(data.audio)}`)
-      await new Promise((resolve) => {
-        audio.onended = resolve;
-        audio.play();
-      });
+      await playNpcAudio(data.audio, signal);
+      if (signal.aborted) return;
       state.npcSpeaking = false;
       setStatus("idle", "Halte die Leertaste gedrückt, um erneut zu sprechen.");
     } else {
       nextItem();
-      setStatus("idle", "Halte die Leertaste gedrückt, um erneut zu sprechen.")
+      if (signal.aborted) return;
+      setStatus("idle", "Halte die Leertaste gedrückt, um erneut zu sprechen.");
     }
   } catch (error) {
+    if (isSessionAbortError(error)) return;
     console.error(error);
-    setStatus("idle", error.message || "Etwas ist schiefgelaufen — probiere es nochmal");
+    if (!signal.aborted) {
+      setStatus("idle", error.message || "Etwas ist schiefgelaufen — probiere es nochmal");
+    }
   } finally {
-    state.isProcessing = false;
+    if (!signal.aborted) {
+      state.isProcessing = false;
+    }
   }
 }
 

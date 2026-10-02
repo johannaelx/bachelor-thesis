@@ -14,6 +14,9 @@ export const state = {
   // session UI
   translationRevealed: false,
   npcSpeaking: false,
+  sessionActive: false,
+  sessionAbortController: null,
+  activeAudio: null,
 
   // audio recording
   isRecording: false,

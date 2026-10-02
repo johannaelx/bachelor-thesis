@@ -114,6 +114,7 @@ async function sendRecording(wavBlob) {
   formData.append("audio", wavBlob, "recording.wav");
   formData.append("user_id", state.currentUserId);
   formData.append("item_id", state.items[state.currentItemIndex].id);
+  formData.append("session_id", state.sessionId);
   formData.append("translation_revealed", state.translationRevealed);
   if (nextVocabItem) {
     formData.append("next_item_id", nextVocabItem.id);

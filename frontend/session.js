@@ -17,11 +17,32 @@ export function showItem(index) {
   state.translationRevealed = false;
 }
 
+async function endSession() {
+  if (state.sessionId === null) return;
+
+  const sessionId = state.sessionId;
+  state.sessionId = null;
+
+  try {
+    const response = await fetch("/conversation/end", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    if (!response.ok) {
+      console.error("Session konnte nicht beendet werden.");
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 function showFinished() {
   targetWordEl.textContent = "🎉";
   translationEl.classList.add("hidden");
   showTranslationBtn.style.display = "none";
   document.querySelector(".vocabulary-label").textContent = "Alle Wörter geübt!";
+  endSession();
 }
 
 export function nextItem() {

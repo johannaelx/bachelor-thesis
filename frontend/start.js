@@ -122,6 +122,7 @@ startBtn.addEventListener("click", async () => {
 
     if (!greetRes.ok) throw new Error("Gespräch konnte nicht gestartet werden.");
     const greetData = await greetRes.json();
+    state.sessionId = greetData.session_id;
 
     if (greetData.audio) {
       const audio = new Audio(`data:audio/wav;base64,${greetData.audio}`);

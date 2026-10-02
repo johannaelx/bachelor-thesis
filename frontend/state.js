@@ -4,6 +4,7 @@ export const state = {
   // session identity
   currentUserId: null,    // number (existing user) or "new"
   currentDeckId: null,
+  sessionId: null,
   newProfileName: "",
 
   // vocabulary items

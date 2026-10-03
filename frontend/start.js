@@ -1,5 +1,13 @@
 import { state } from "./state.js";
-import { loadDeck, setStatus } from "./session.js";
+import { playNpcAudio, stopNpcAudio } from "./audio.js";
+import {
+  abortSessionWork,
+  beginSessionAbortScope,
+  endSession,
+  isSessionAbortError,
+  loadDeck,
+  setStatus,
+} from "./session.js";
 
 const screenStart = document.getElementById("screen-start");
 const screenSession = document.getElementById("screen-session");
@@ -8,6 +16,7 @@ const deckListEl = document.getElementById("deck-list");
 const newProfileForm = document.getElementById("new-profile-form");
 const newProfileNameInput = document.getElementById("new-profile-name");
 const startBtn = document.getElementById("start-btn");
+const endSessionBtn = document.getElementById("end-session-btn");
 
 function createSelectionCard(label, onClick) {
   const card = document.createElement("button");
@@ -87,6 +96,7 @@ newProfileNameInput.addEventListener("input", () => {
 startBtn.addEventListener("click", async () => {
   startBtn.disabled = true;
   startBtn.textContent = "Wird gestartet…";
+  const signal = beginSessionAbortScope();
 
   try {
     // create user in DB if new profile was chosen
@@ -106,6 +116,8 @@ startBtn.addEventListener("click", async () => {
     // switch to session screen
     screenStart.classList.add("hidden");
     screenSession.classList.remove("hidden");
+    state.sessionActive = true;
+    endSessionBtn.disabled = false;
 
     // NPC opens the conversation
     setStatus("processing", "NPC spricht...");
@@ -118,28 +130,50 @@ startBtn.addEventListener("click", async () => {
         user_id: state.currentUserId,
         item_id: state.items[0].id,
       }),
+      signal,
     });
 
     if (!greetRes.ok) throw new Error("Gespräch konnte nicht gestartet werden.");
     const greetData = await greetRes.json();
+    if (signal.aborted) {
+      await endSession(greetData.session_id);
+      return;
+    }
+    state.sessionId = greetData.session_id;
 
     if (greetData.audio) {
-      const audio = new Audio(`data:audio/wav;base64,${greetData.audio}`);
-      await new Promise((resolve) => {
-        audio.onended = resolve;
-        audio.play();
-      });
+      await playNpcAudio(greetData.audio, signal);
     }
 
   } catch (err) {
+    if (isSessionAbortError(err)) return;
     console.error(err);
+    if (signal.aborted) return;
     alert(err.message || "Fehler beim Starten der Session.");
     startBtn.disabled = false;
     startBtn.textContent = "Session starten";
   } finally {
+    if (signal.aborted) return;
     state.npcSpeaking = false;
-    setStatus("idle", "Halte die Leertaste gedrückt, um zu sprechen.");
+    if (state.sessionActive) {
+      setStatus("idle", "Halte die Leertaste gedrückt, um zu sprechen.");
+    }
   }
+});
+
+endSessionBtn.addEventListener("click", async () => {
+  endSessionBtn.disabled = true;
+  abortSessionWork();
+  state.sessionActive = false;
+  state.npcSpeaking = false;
+  state.isProcessing = false;
+  stopNpcAudio();
+  await endSession();
+
+  screenSession.classList.add("hidden");
+  screenStart.classList.remove("hidden");
+  startBtn.textContent = "Session starten";
+  updateStartBtn();
 });
 
 export async function initStartScreen() {

@@ -14,11 +14,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.asr.whisper import transcribe_wav_bytes
+from backend.app.chat_log import add_message, create_learning_session, end_learning_session
 from backend.app.llm.openai_api import npc_chat, score_vocabulary, npc_greeting, reset_memory
 from backend.app.tts.piper import load_voice, speaker
 from backend.app.database import get_db
 from backend.app.models.deck import Deck
 from backend.app.models.item import Item
+from backend.app.models.session import Session as LearningSession
 from backend.app.models.user import User
 from backend.app.models.user_item_progress import UserItemProgress
 from backend.app.spaced_repetition.progress import apply_and_save_review
@@ -46,6 +48,9 @@ class ReviewRequest(BaseModel):
 class ConversationStartRequest(BaseModel):
     user_id: int
     item_id: int
+
+class ConversationEndRequest(BaseModel):
+    session_id: int
 
 
 @app.get("/health")
@@ -128,10 +133,24 @@ def conversation_start(body: ConversationStartRequest, db: Session = Depends(get
     if not item:
         raise HTTPException(status_code=404, detail="Item not found.")
 
+    user = db.get(User, body.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
     reset_memory()
 
     llm_response: dict = npc_greeting(item.english)
     print("GREETING:", repr(llm_response))
+
+    learning_session = create_learning_session(db, body.user_id, item.deck_id)
+    add_message(
+        db,
+        session_id=learning_session.id,
+        sender="assistant",
+        content=llm_response["reply"],
+        item_id=item.id,
+    )
+    db.commit()
 
     tts_audio: bytes = speaker(llm_response["reply"])
     audio_b64 = base64.b64encode(tts_audio).decode("utf-8")
@@ -139,6 +158,7 @@ def conversation_start(body: ConversationStartRequest, db: Session = Depends(get
     return JSONResponse(content={
         "reply": llm_response["reply"],
         "audio": audio_b64,
+        "session_id": learning_session.id,
     })
 
 @app.post("/conversation")
@@ -146,6 +166,7 @@ async def conversation(
     audio: UploadFile = File(...),
     user_id: int = Form(...),
     item_id: int = Form(...),
+    session_id: int = Form(...),
     translation_revealed: bool = Form(False),
     next_item_id: int | None = Form(None),
     db: Session = Depends(get_db),
@@ -154,7 +175,9 @@ async def conversation(
     Processes a spoken user input through the full speech pipeline:
     ASR (Faster Whisper) -> LLM scoring -> SM-2 -> DB -> LLM reply (gpt-4o-mini) -> TTS (Piper).
 
-    Expects a WAV audio file plus user_id and item_id as form fields.
+    Expects a WAV audio file plus user_id, item_id and session_id as form fields.
+    Persists the user transcription (with target word and q) and the NPC reply
+    (with the target word that reply should elicit).
     Returns the NPC reply text, base64-encoded audio, and the SM-2 result.
     """
 
@@ -163,6 +186,10 @@ async def conversation(
     # simple lock to prevent multiple conversations running simultaneously
     if conversation_running:
         raise HTTPException(status_code=429, detail="Conversation already running")
+
+    learning_session = db.get(LearningSession, session_id)
+    if learning_session is None or learning_session.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Session not found.")
 
     try:
         conversation_running = True
@@ -201,14 +228,33 @@ async def conversation(
 
         # next target_word for NPC reply
         next_target_word: str | None = None
+        npc_item_id: int | None = None
         if next_item_id is not None:
             next_item = db.get(Item, next_item_id)
             if next_item:
                 next_target_word = next_item.english
+                npc_item_id = next_item.id
 
         # LLM reply
         llm_response: dict = npc_chat(transcription, next_target_word)
         print("LLM_RESPONSE:", repr(llm_response))
+
+        add_message(
+            db,
+            session_id=session_id,
+            sender="user",
+            content=transcription,
+            item_id=item_id,
+            q=q,
+        )
+        add_message(
+            db,
+            session_id=session_id,
+            sender="assistant",
+            content=llm_response["reply"],
+            item_id=npc_item_id,
+        )
+        db.commit()
 
         # TTS
         tts_audio: bytes = speaker(llm_response["reply"])
@@ -231,6 +277,18 @@ async def conversation(
         "scoring": scoring,
         "sm2": sm2_result,
     })
+
+
+@app.post("/conversation/end")
+def conversation_end(body: ConversationEndRequest, db: Session = Depends(get_db)):
+    """Marks a learning session as finished."""
+    learning_session = end_learning_session(db, body.session_id)
+    if learning_session is None or learning_session.ended_at is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    return {
+        "session_id": learning_session.id,
+        "ended_at": learning_session.ended_at.isoformat(),
+    }
 
 
 # Serve the frontend after API routes so /health and /conversation stay intact.

@@ -7,9 +7,25 @@ const statusIndicator = document.getElementById("status-indicator");
 const statusText = document.getElementById("status-text");
 const deckNameEl = document.getElementById("deck-name");
 
+export function beginSessionAbortScope() {
+  state.sessionAbortController?.abort();
+  state.sessionAbortController = new AbortController();
+  return state.sessionAbortController.signal;
+}
+
+export function abortSessionWork() {
+  state.sessionAbortController?.abort();
+  state.sessionAbortController = null;
+}
+
+export function isSessionAbortError(error) {
+  return error?.name === "AbortError";
+}
+
 export function showItem(index) {
   const item = state.items[index];
   if (!item) return;
+  document.querySelector(".vocabulary-label").textContent = "Wort";
   targetWordEl.textContent = item.german;
   translationEl.textContent = item.english;
   translationEl.classList.add("hidden");
@@ -17,11 +33,32 @@ export function showItem(index) {
   state.translationRevealed = false;
 }
 
+export async function endSession(sessionId = state.sessionId) {
+  if (sessionId == null) return;
+  if (state.sessionId === sessionId) {
+    state.sessionId = null;
+  }
+
+  try {
+    const response = await fetch("/conversation/end", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    if (!response.ok) {
+      console.error("Session konnte nicht beendet werden.");
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 function showFinished() {
   targetWordEl.textContent = "🎉";
   translationEl.classList.add("hidden");
   showTranslationBtn.style.display = "none";
   document.querySelector(".vocabulary-label").textContent = "Alle Wörter geübt!";
+  endSession();
 }
 
 export function nextItem() {

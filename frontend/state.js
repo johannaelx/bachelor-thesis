@@ -4,6 +4,7 @@ export const state = {
   // session identity
   currentUserId: null,    // number (existing user) or "new"
   currentDeckId: null,
+  sessionId: null,
   newProfileName: "",
 
   // vocabulary items
@@ -13,6 +14,9 @@ export const state = {
   // session UI
   translationRevealed: false,
   npcSpeaking: false,
+  sessionActive: false,
+  sessionAbortController: null,
+  activeAudio: null,
 
   // audio recording
   isRecording: false,

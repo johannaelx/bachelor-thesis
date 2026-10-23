@@ -8,9 +8,12 @@ from evaluation.pipeline import build_conversational_test_case
 DEFAULT_JUDGE_MODEL = "gpt-4o"
 
 COHERENCE_EVALUATION_STEPS = [
-    "Read the full conversation in chronological order.",
-    "Check whether later turns remain consistent with earlier ones (topics, facts, tone).",
-    "Penalize clear contradictions or responses that ignore important prior context.",
+    "1. Read the full conversation in chronological order.",
+    "2. Identify the overarching goal or main topic of the conversation.",
+    "3. Relational Check: Evaluate if consecutive turns form logical relations (e.g. causality, explanations) using context and world knowldge.",
+    "4. Varify if each response provides at least a partial answer to the current implicit or explicit question.",
+    "5. Penalize responses that read as isolated facts without a logical bridge to the prior turn.",
+    "6. Penalize responses that derail from the overarching topic."
 ]
 
 
